@@ -1,10 +1,11 @@
 from __future__ import annotations
 from datetime import UTC, datetime
 
+
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relatioship
 
-from database import Base
+from db.database import Base
 
 
 class User(Base):
@@ -28,6 +29,22 @@ class User(Base):
         return "/media/profile_pics/default.jpg"
 
 class Post(Base):
-     __tablename__ = "posts"
+    __tablename__ = "posts"
+
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    title: Mapped[str] = mapped_column(String(100), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+    date_posted: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC)
+    )
+    author: Mapped[User] = relatioship(back_populates="posts")
 
      
