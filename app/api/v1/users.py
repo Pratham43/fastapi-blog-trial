@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 
 from schemas.post_schema import PostResponse
 from models import models
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fastapi.security import OAuth2PasswordRequestForm
@@ -48,7 +48,7 @@ async def create_user(
         )
 
     result = db.execute(
-        select(models.User).where(models.User.email == user.email)
+        select(models.User).where(func.lower(models.User.email) == user.email.lower())
     )
     existing_email = result.scalars().first()
     if existing_email:
@@ -118,7 +118,7 @@ async def update_user(
     
     if user_update.username is not None and user_update.username != user.username:
         result = db.execute(
-            select(models.User).where(models.User.username == user_update.username)
+            select(models.User).where(func.lower(models.User.username) == user_update.username.lower())
         )
 
         existing_user = result.scalars().first()
@@ -131,7 +131,7 @@ async def update_user(
         
     if user_update.email is not None and user_update.email != user.email:
         result = db.execute(
-            select(models.User).where(models.User.email == user_update.email)
+            select(models.User).where(func.lower(models.User.email) == user_update.email.lower())
         )
 
         existing_email = result.scalars().first()
