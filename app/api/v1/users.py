@@ -11,25 +11,34 @@ from models import models
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fastapi.security import OAuth2PasswordRequestForm
+
+from utils.auth import (
+    create_access_token,
+    hash_password,
+    oauth2_scheme,
+    verify_access_token,
+    verify_password,
+)
 
 
 from config import Settings
 from db.database import get_db, engine, Base
-from schemas.user_schema import UserCreate, UserResponse, UserUpdate
+from schemas.user_schema import UserCreate, UserPublic, UserPrivate, UserUpdate, Token
 
 user_router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 @user_router.post(
     "/api/v1/users",
-    response_model=UserResponse,
+    response_model=UserPrivate,
     status_code=status.HTTP_201_CREATED
 )
 async def create_user(
     user: UserCreate,
     db: Annotated[AsyncSession, Depends(get_db)]
-) -> UserResponse:
+) -> UserPrivate:
     result = db.execute(
-        select(models.User).where(models.User.username == user.username)
+        select(models.User).where(func.lower(models.User.username) == user.username.lower())
     )
     existing_username = result.scalars().first()
     if existing_username:
@@ -157,4 +166,3 @@ async def delete_user(
     
     db.delete(user)
     db.commit()
-    

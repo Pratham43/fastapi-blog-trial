@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from typing import Annotated
 from models import models
 from schemas.post_schema import PostCreate, PostResponse, PostUpdate
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from db.database import get_db
+
 post_router = APIRouter(prefix="/api/v1/posts", tags=["posts"])
 
 
@@ -112,5 +113,5 @@ def get_post(post_id: int, db: Annotated[Session, Depends(get_db)]):
 
     db.delete(post)
     db.commit()
-    
+
     
