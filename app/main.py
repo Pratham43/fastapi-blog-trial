@@ -10,7 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from models import models
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
+import uvicorn
 
 
 from config import Settings
@@ -62,4 +62,4 @@ async def health_check(db: Annotated[AsyncSession, Depends(get_db)]):
     return {"status": "healthy"}
 
 if __name__ == "__main__":
-    pass
+    uvicorn.run(app, host="0.0.0.0", port=8060)
