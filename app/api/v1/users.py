@@ -56,7 +56,7 @@ async def create_user(
             detail="Username already exists"
         )
 
-    result = db.execute(
+    result = await db.execute(
         select(models.User).where(func.lower(models.User.email) == user.email.lower())
     )
     existing_email = result.scalars().first()
@@ -209,7 +209,7 @@ async def update_user(
             )
         
     if user_update.email is not None and user_update.email.lower() != user.email.lower():
-        result = db.execute(
+        result = await db.execute(
             select(models.User).where(func.lower(models.User.email) == user_update.email.lower())
         )
 
