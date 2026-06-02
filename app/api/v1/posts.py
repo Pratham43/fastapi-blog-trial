@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from typing import Annotated
 from models import models
-from schemas.post_schema import PostCreate, PostResponse, PostUpdate
-from sqlalchemy import func, select
+from schemas.post_schema import PostCreate, PostResponse, PostUpdate, PaginatedPostsResponse
+from sqlalchemy import func, select, selectinload
 from sqlalchemy.orm import Session
 
 from app.utils.auth import CurrentUser
+from app.config import Settings
 
 from db.database import get_db
 
@@ -14,19 +15,41 @@ post_router = APIRouter(prefix="/api/v1/posts", tags=["posts"])
 
 
 
-@post_router.get("/posts", response_model=list[PostResponse])
-def get_posts(db: Annotated[Session, Depends(get_db)]):
-    result = db.execute(select(models.Post))
+@post_router.get("", response_model=PaginatedPostsResponse)
+async def get_posts(
+    db: Annotated[Session, Depends(get_db)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
+):
+    count_result = await db.execute(select(func.count()).select_from(models.Post))
+    total = count_result.scalar() or 0 
+    
+    result = db.execute(
+        select(models.Post)
+        .options(selectinload(models.Post.author))
+        .order_by(models.Post.date_posted.desc())
+        .offset(skip)
+        .limit(Settings.posts_per_page)
+    )
     posts = result.scalars().all()
-    return posts
+
+    has_more = (skip + len(posts)) < total
+
+    return PaginatedPostsResponse(
+        posts=[PostResponse.model_validate(post) for post in posts],
+        total=total,
+        skip=skip,
+        limit=limit,
+        has_more=has_more
+    )
 
 
 @post_router.post(
-    "/api/posts",
+    "",
     response_model=PostResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_post(
+async def create_post(
     post: PostCreate,
     current_user: CurrentUser, 
     db: Annotated[Session, Depends(get_db)]
@@ -36,15 +59,15 @@ def create_post(
         content=post.content,
         user_id=current_user.id,
     )
-    db.add(new_post)
-    db.commit()
-    db.refresh(new_post)
+    await db.add(new_post)
+    await db.commit()
+    await db.refresh(new_post)
     return new_post
 
 
 @post_router.get("/{post_id}", response_model=PostResponse)
-def get_post(post_id: int, db: Annotated[Session, Depends(get_db)]):
-    result = db.execute(select(models.Post).where(models.Post.id == post_id))
+async def get_post(post_id: int, db: Annotated[Session, Depends(get_db)]):
+    result = await db.execute(select(models.Post).where(models.Post.id == post_id))
     post = result.scalars().first()
     if post:
         return post
@@ -52,13 +75,13 @@ def get_post(post_id: int, db: Annotated[Session, Depends(get_db)]):
 
 
 @post_router.put("/{post_id}", response_model=PostResponse)
-def update_post_full(
+async def update_post_full(
     post_id: int, 
     post_data: PostCreate, 
     current_user: CurrentUser,
     db: Annotated[Session, Depends(get_db)]
 ):
-    result = db.execute(select(models.Post).where(models.Post.id == post_id))
+    result = await db.execute(select(models.Post).where(models.Post.id == post_id))
     post = result.scalars().first()
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
@@ -72,19 +95,19 @@ def update_post_full(
     post.title = post_data.title
     post.content = post_data.content
 
-    db.commit()
-    db.refresh(post)
+    await db.commit()
+    await db.refresh(post)
     return post
 
 
 @post_router.patch("/{post_id}", response_model=PostResponse)
-def update_post_partial(
+async def update_post_partial(
     post_id: int, 
     post_data: PostUpdate, 
     current_user: CurrentUser,
     db: Annotated[Session, Depends(get_db)]
 ):
-    result = db.execute(select(models.Post).where(models.Post.id == post_id))
+    result = await db.execute(select(models.Post).where(models.Post.id == post_id))
     post = result.scalars().first()
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
@@ -99,18 +122,18 @@ def update_post_partial(
     for field, value in update_data.items():
         setattr(post, field, value)
 
-    db.commit()
-    db.refresh(post)
+    await db.commit()
+    await db.refresh(post)
     return post
 
 
 @post_router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
-def get_post(
+async def get_post(
     post_id: int, 
     current_user: CurrentUser,
     db: Annotated[Session, Depends(get_db)]
 ):
-    result = db.execute(select(models.Post).where(models.Post.id == post_id))
+    result = await db.execute(select(models.Post).where(models.Post.id == post_id))
     post = result.scalars().first()
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
@@ -121,7 +144,7 @@ def get_post(
             detail="Not Authorized to delete this post"
         )
 
-    db.delete(post)
-    db.commit()
+    await db.delete(post)
+    await db.commit()
 
     

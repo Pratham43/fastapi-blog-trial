@@ -2,16 +2,17 @@
 from datetime import timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, status, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
 
 from PIL import UnidentifiedImageError
 
-from schemas.post_schema import PostResponse
+from schemas.user_schema import UserCreate, UserPublic, UserPrivate, UserUpdate, Token
+from schemas.post_schema import PostResponse, PaginatedPostsResponse
 from models import models
-from sqlalchemy import func, select
+from sqlalchemy import func, select, selectinload
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -32,7 +33,7 @@ from utils.image_handler import (
 
 from config import Settings
 from db.database import get_db, engine, Base
-from schemas.user_schema import UserCreate, UserPublic, UserPrivate, UserUpdate, Token
+
 
 user_router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
@@ -45,7 +46,7 @@ async def create_user(
     user: UserCreate,
     db: Annotated[AsyncSession, Depends(get_db)]
 ) -> UserPrivate:
-    result = db.execute(
+    result = await db.execute(
         select(models.User).where(func.lower(models.User.username) == user.username.lower())
     )
     existing_username = result.scalars().first()
@@ -81,7 +82,7 @@ async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     db: Annotated[AsyncSession, Depends(get_db)]
 ) -> Token:
-    result = db.execute(
+    result = await db.execute(
         select(models.User).where(
             func.lower(models.User.email) == form_data.username.lower()
         )
@@ -115,7 +116,7 @@ async def get_user(
     user_id: int,
     db: Annotated[AsyncSession, Depends(get_db)]
 ) -> UserPublic:
-    result = db.execute(
+    result = await db.execute(
         select(models.User).where(models.User.id == user_id)
     )
     user = result.scalars().first()
@@ -126,12 +127,14 @@ async def get_user(
         )
     return user
 
-@user_router.get("/{user_id}/posts", response_model=list[PostResponse])
+@user_router.get("/{user_id}/posts", response_model=PaginatedPostsResponse)
 async def get_user_posts(
     user_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)]
+    db: Annotated[AsyncSession, Depends(get_db)],
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10
 ) -> list[PostResponse]:
-    result = db.execute(
+    result = await db.execute(
         select(models.User).where(models.User.id == user_id)
     )
 
@@ -141,9 +144,33 @@ async def get_user_posts(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
-    result = db.execute(select(models.Post).where(models.Post.user_id == user_id))
+    
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(models.Post)
+        .where(models.Post.user_id == user_id)
+    )
+    
+    total = count_result.scalar() or 0
+
+    result = await db.execute(
+        select(models.Post)
+        .options(selectinload(models.Post.author))
+        .where(models.Post.user_id == user_id)
+        .order_by(models.Post.date_posted.desc())
+        .offset(skip)
+        .limit(limit)
+    )
     posts = result.scalars().all()
-    return posts
+    has_more = (len(posts) + skip) < total
+    result = await db.execute(select(models.Post).where(models.Post.user_id == user_id))
+    posts = result.scalars().all()
+    return PaginatedPostsResponse(
+        total=total,
+        skip=skip,
+        limit=limit,
+        has_more=has_more
+    )
 
 
 @user_router.patch("/{user_id}", response_model=UserPrivate)
@@ -169,7 +196,7 @@ async def update_user(
         )
     
     if user_update.username is not None and user_update.username.lower() != user.username.lower():
-        result = db.execute(
+        result = await db.execute(
             select(models.User).where(func.lower(models.User.username) == user_update.username.lower())
         )
 
@@ -198,8 +225,8 @@ async def update_user(
     for field, value in update_data:
         setattr(user, field, value)
 
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
     return user
 
 @user_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -213,7 +240,7 @@ async def delete_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not Authorized to delete this user"
         )
-    result = db.execute(select(models.User).where(models.User.user_id == user_id))
+    result = await db.execute(select(models.User).where(models.User.user_id == user_id))
     user = result.scalars().first()
 
     if not user:
@@ -225,8 +252,8 @@ async def delete_user(
     old_filename = user.image_file
 
     
-    db.delete(user)
-    db.commit()
+    await db.delete(user)
+    await db.commit()
 
     if old_filename:
         delete_profile_image(old_filename)
