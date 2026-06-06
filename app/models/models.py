@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relatioship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, relatioship
 
 from db.database import Base
 
@@ -24,12 +24,20 @@ class User(Base):
         back_populates="author", 
         cascade="all, delete-orphan"
     )
+    
+    reset_token = Mapped[list[PasswordResetToken]] = relationship(
+            back_populates="user",
+            cascade="all, delete-orphan",
+    )
 
     @property
     def image_path(self) -> str:
         if self.image_file:
             return f"/media/profile_pics/{self.image_file}"
         return "/media/profile_pics/default.jpg"
+    
+    
+    
 
 class Post(Base):
     __tablename__ = "posts"
@@ -59,6 +67,6 @@ class PasswordResetToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default= lambda: datetime.now(UTC))
     
-    user: Mapped[User] = relatioship(back_populates="reset_tokens")
+    user: Mapped[User] = relationship(back_populates="reset_tokens")
     
     

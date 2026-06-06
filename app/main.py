@@ -14,7 +14,7 @@ import uvicorn
 
 
 from config import Settings
-from db.database import get_db, engine, Base
+from db.database import get_db, engine
 from schemas.post_schema import PostCreate, PostResponse
 from schemas.user_schema import UserCreate, UserResponse
 
@@ -27,8 +27,7 @@ from app.core.exceptions import (
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    
     yield
     await engine.dispose()
 
