@@ -6,7 +6,7 @@ from sqlalchemy import func, select, selectinload
 from sqlalchemy.orm import Session
 
 from app.utils.auth import CurrentUser
-from app.config import Settings
+from app.config import settings
 
 from db.database import get_db
 
@@ -29,7 +29,7 @@ async def get_posts(
         .options(selectinload(models.Post.author))
         .order_by(models.Post.date_posted.desc())
         .offset(skip)
-        .limit(Settings.posts_per_page)
+        .limit(settings.posts_per_page)
     )
     posts = result.scalars().all()
 

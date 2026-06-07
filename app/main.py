@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 import uvicorn
 
 
-from config import Settings
+from config import settings
 from db.database import get_db, engine
 from schemas.post_schema import PostCreate, PostResponse
 from schemas.user_schema import UserCreate, UserResponse

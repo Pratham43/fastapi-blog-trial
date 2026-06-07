@@ -37,7 +37,7 @@ from utils.image_handler import (
 )
 
 
-from config import Settings
+from config import settings
 from db.database import get_db, engine, Base
 
 
@@ -102,7 +102,7 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token_expires = timedelta(minutes=Settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
     access_token = create_access_token(
         data={"sub": str(user.id)}, 
@@ -133,7 +133,7 @@ async def forgot_password(
         token = generate_reset_token()
         token_hash = hash_reset_token(token)
         expires_at = datetime.now(UTC) + timedelta(
-            minutes=Settings.reset_token_expire_minutes
+            minutes=settings.reset_token_expire_minutes
         )
         
         reset_token = models.PasswordResetToken(
@@ -177,7 +177,7 @@ async def reset_password(
             detail="Invalid or expired reset token."
         )
 
-    if reset_token.expires_at.replace(tzinfo=UTC) < datetime.now(UTC):
+    if reset_token.expires_at < datetime.now(UTC):
         await db.delete(reset_token)
         await db.commit()
         raise HTTPException(
@@ -409,10 +409,10 @@ async def upload_profile_picture(
     
     content = await file.read()
 
-    if len(content) > Settings.max_upload_size_bytes:
+    if len(content) > settings.max_upload_size_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File too large. Maximum size is {Settings.max_upload_size_bytes// (1024*1024)}MB"
+            detail=f"File too large. Maximum size is {settings.max_upload_size_bytes// (1024*1024)}MB"
         )
     
     try:

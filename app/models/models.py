@@ -3,9 +3,9 @@ from datetime import UTC, datetime
 
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship, relatioship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from db.database import Base
+from app.db.database import Base
 
 
 class User(Base):
@@ -20,12 +20,12 @@ class User(Base):
         default=None
     )
 
-    posts: Mapped[list[Post]] = relatioship(
+    posts: Mapped[list[Post]] = relationship(
         back_populates="author", 
         cascade="all, delete-orphan"
     )
     
-    reset_token = Mapped[list[PasswordResetToken]] = relationship(
+    reset_tokens: Mapped[list[PasswordResetToken]] = relationship(
             back_populates="user",
             cascade="all, delete-orphan",
     )
@@ -56,7 +56,9 @@ class Post(Base):
         nullable=False,
         default=lambda: datetime.now(UTC)
     )
-    author: Mapped[User] = relatioship(back_populates="posts")
+    
+    likes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    author: Mapped[User] = relationship(back_populates="posts")
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"

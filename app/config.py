@@ -1,6 +1,7 @@
 from pydantic import SecretStr
-from pydantic_core import BaseSettings, SettingsConfigDict
+#from pydantic_core import BaseSettings, SettingsConfigDict
 
+from pydantic_settings import SettingsConfigDict, BaseSettings
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(

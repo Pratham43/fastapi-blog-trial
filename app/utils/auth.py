@@ -4,7 +4,7 @@ import jwt
 from fastapi.security import OAuth2PasswordBearer
 from pwdlib import PasswordHash
 
-from config import settings
+from app.config import settings
 
 from typing import Annotated
 from fastapi import Depends, HTTPEception, status
