@@ -37,5 +37,18 @@ class Settings(BaseSettings):
 
     frontend_url: str = "http://localhost:8000"
 
+    # Redis/Valkey Configuration
+    redis_url: str = "redis://localhost:6379/0"
+    redis_cache_expire_seconds: int = 300
+
+    # Google OAuth Configuration
+    google_client_id: str | None = None
+    google_client_secret: SecretStr | None = None
+    google_redirect_uri: str | None = None
+
+    # Logging Configuration
+    log_level: str = "INFO"
+    log_format: str = "json"  # or "console"
+
 
 settings = Settings()  # type: ignore[call-arg] # Loaded from .env file

@@ -1,0 +1,30 @@
+# ============================================================
+# DEV Dockerfile  (hot-reload via uvicorn --reload)
+# Source code is bind-mounted in docker-compose.dev.yml
+# so no COPY needed — changes are reflected immediately.
+# ============================================================
+
+FROM python:3.13-slim
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Install curl for healthchecks
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install dependencies into the project virtualenv
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen
+
+# Set virtualenv on PATH
+ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8060
+
+# Run migrations then start dev server with hot-reload
+# alembic.ini and alembic/ are at /app root (bind-mounted)
+CMD ["sh", "-c", "alembic -c /app/alembic.ini upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8060 --reload --reload-dir /app/app"]

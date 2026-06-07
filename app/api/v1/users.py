@@ -1,26 +1,30 @@
 
 from datetime import timedelta, UTC, datetime
 from typing import Annotated
+import secrets
+import urllib.parse
+import httpx
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, status, Query, BackgroundTasks
+from fastapi.responses import RedirectResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
 
 from PIL import UnidentifiedImageError
 
-from schemas.user_schema import UserCreate, UserPublic, UserPrivate, UserUpdate, Token, ChangePasswordRequest, ForgotPasswordRequest, ResetPasswordRequest
-from schemas.post_schema import PostResponse, PaginatedPostsResponse
-from models import models
-from sqlalchemy import func, select, selectinload
-from sqlalchemy.orm import Session
+from app.schemas.user_schema import UserCreate, UserPublic, UserPrivate, UserUpdate, Token, ChangePasswordRequest, ForgotPasswordRequest, ResetPasswordRequest
+from app.schemas.post_schema import PostResponse, PaginatedPostsResponse
+from app.models import models
+from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 from starlette.concurrency import run_in_threadpool
 
 from sqlalchemy import delete as sql_delete
 
 from fastapi.security import OAuth2PasswordRequestForm
 
-from utils.auth import (
+from app.utils.auth import (
     CurrentUser,
     create_access_token,
     hash_password,
@@ -31,17 +35,17 @@ from utils.auth import (
 
 from botocore.exceptions import ClientError
 
-from utils.email_handler import send_password_reset_email
+from app.utils.email_handler import send_password_reset_email
 
-from utils.image_handler import (
+from app.utils.image_handler import (
     delete_profile_image,
     process_profile_image,
     upload_profile_image
 )
 
 
-from config import settings
-from db.database import get_db, engine, Base
+from app.config import settings
+from app.db.database import get_db, engine, Base
 
 
 user_router = APIRouter(prefix="/api/v1/users", tags=["users"])
@@ -112,6 +116,121 @@ async def login_for_access_token(
         expires_delta=access_token_expires
     )
     return Token(access_token=access_token, token_type="bearer")
+
+@user_router.get("/auth/google/login")
+async def google_login():
+    """Redirect user to Google OAuth2 consent screen."""
+    if not settings.google_client_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google Auth is not configured on the server"
+        )
+    
+    redirect_uri = settings.google_redirect_uri or f"{settings.frontend_url}/api/v1/users/auth/google/callback"
+    params = {
+        "client_id": settings.google_client_id,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "redirect_uri": redirect_uri,
+        "access_type": "offline",
+        "prompt": "consent"
+    }
+    url = f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
+    return RedirectResponse(url=url)
+
+@user_router.get("/auth/google/callback")
+async def google_callback(
+    code: str,
+    db: Annotated[AsyncSession, Depends(get_db)]
+):
+    """Exchange auth code for Google token, auto-register if new, and redirect to React with JWT."""
+    if not settings.google_client_id or not settings.google_client_secret:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google Auth is not configured on the server"
+        )
+        
+    redirect_uri = settings.google_redirect_uri or f"{settings.frontend_url}/api/v1/users/auth/google/callback"
+
+    async with httpx.AsyncClient() as client:
+        token_url = "https://oauth2.googleapis.com/token"
+        data = {
+            "code": code,
+            "client_id": settings.google_client_id,
+            "client_secret": settings.google_client_secret.get_secret_value(),
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        }
+        try:
+            token_response = await client.post(token_url, data=data)
+            token_response.raise_for_status()
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to exchange Google code: {str(e)}"
+            )
+
+        tokens = token_response.json()
+        google_access_token = tokens.get("access_token")
+
+        userinfo_url = "https://www.googleapis.com/oauth2/v3/userinfo"
+        headers = {"Authorization": f"Bearer {google_access_token}"}
+        try:
+            userinfo_response = await client.get(userinfo_url, headers=headers)
+            userinfo_response.raise_for_status()
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to fetch Google user info: {str(e)}"
+            )
+
+        user_info = userinfo_response.json()
+        email = user_info.get("email")
+        name = user_info.get("name")
+
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Google account must have a verified email address."
+            )
+
+    result = await db.execute(
+        select(models.User).where(func.lower(models.User.email) == email.lower())
+    )
+    user = result.scalars().first()
+
+    if not user:
+        base_username = name.replace(" ", "").lower() if name else email.split("@")[0]
+        username = base_username
+        suffix = 1
+        while True:
+            un_result = await db.execute(
+                select(models.User).where(func.lower(models.User.username) == username.lower())
+            )
+            if not un_result.scalars().first():
+                break
+            username = f"{base_username}{suffix}"
+            suffix += 1
+
+        random_password = secrets.token_urlsafe(16)
+        user = models.User(
+            username=username,
+            email=email.lower(),
+            password_hash=hash_password(random_password),
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
+    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    access_token = create_access_token(
+        data={"sub": str(user.id)},
+        expires_delta=access_token_expires
+    )
+    
+    # Redirect back to the React SPA frontend callback route with the JWT token
+    frontend_redirect_url = f"{settings.frontend_url}/auth/callback?token={access_token}"
+    return RedirectResponse(url=frontend_redirect_url)
 
 @user_router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
 async def forgot_password(
@@ -324,7 +443,7 @@ async def update_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not Authorized to update this user"
         )
-    result = db.execute(select(models.User).where(models.User.id == user_id))
+    result = await db.execute(select(models.User).where(models.User.id == user_id))
     user = result.scalars().first()
 
     if not user:
@@ -360,7 +479,7 @@ async def update_user(
             )
 
     update_data = user_update.model_dump(exclude_unset=True)
-    for field, value in update_data:
+    for field, value in update_data.items():
         setattr(user, field, value)
 
     await db.commit()
@@ -378,7 +497,7 @@ async def delete_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not Authorized to delete this user"
         )
-    result = await db.execute(select(models.User).where(models.User.user_id == user_id))
+    result = await db.execute(select(models.User).where(models.User.id == user_id))
     user = result.scalars().first()
 
     if not user:

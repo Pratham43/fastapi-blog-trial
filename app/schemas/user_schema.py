@@ -26,6 +26,10 @@ class UserPublic(BaseModel):
 
 class UserPrivate(UserPublic):  
     email: EmailStr
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
     
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr = Field(max_length=120)

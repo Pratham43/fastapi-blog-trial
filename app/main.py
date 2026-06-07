@@ -7,31 +7,38 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from models import models
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+
 import uvicorn
 
 
-from config import settings
-from db.database import get_db, engine
-from schemas.post_schema import PostCreate, PostResponse
-from schemas.user_schema import UserCreate, UserResponse
+from app.db.database import get_db, engine
 
-from api.v1.users import user_router
-from api.v1.posts import post_router
+from app.api.v1.users import user_router
+from app.api.v1.posts import post_router
 from app.core.exceptions import (
     http_exception_handler,
     validation_exception_handler,
 )
+from app.core.logging import setup_logging
+from app.core.middleware import LoggingMiddleware
+from app.utils.cache import cache
+
+# Initialize structured logging setup
+setup_logging()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    
+    # Initialize Cache provider
+    cache.init()
     yield
+    # Close Cache provider connections
+    await cache.close()
     await engine.dispose()
 
 app = FastAPI(lifespan=lifespan)
+
+# Add Logging Middleware
+app.add_middleware(LoggingMiddleware)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
