@@ -33,7 +33,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-app.mount("/media", StaticFiles(directory="static/media"), name="media")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.add_exception_handler(
     StarletteHTTPException,
