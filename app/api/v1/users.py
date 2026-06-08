@@ -9,18 +9,18 @@ from contextlib import asynccontextmanager
 
 from PIL import UnidentifiedImageError
 
-from schemas.user_schema import UserCreate, UserPublic, UserPrivate, UserUpdate, Token, ChangePasswordRequest, ForgotPasswordRequest, ResetPasswordRequest
-from schemas.post_schema import PostResponse, PaginatedPostsResponse
-from models import models
-from sqlalchemy import func, select, selectinload
-from sqlalchemy.orm import Session
+from app.schemas.user_schema import UserCreate, UserPublic, UserPrivate, UserUpdate, Token, ChangePasswordRequest, ForgotPasswordRequest, ResetPasswordRequest
+from app.schemas.post_schema import PostResponse, PaginatedPostsResponse
+from app.models import models
+from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 from starlette.concurrency import run_in_threadpool
 
 from sqlalchemy import delete as sql_delete
 
 from fastapi.security import OAuth2PasswordRequestForm
 
-from utils.auth import (
+from app.utils.auth import (
     CurrentUser,
     create_access_token,
     hash_password,
@@ -31,23 +31,23 @@ from utils.auth import (
 
 from botocore.exceptions import ClientError
 
-from utils.email_handler import send_password_reset_email
+from app.utils.email_handler import send_password_reset_email
 
-from utils.image_handler import (
+from app.utils.image_handler import (
     delete_profile_image,
     process_profile_image,
     upload_profile_image
 )
 
 
-from config import settings
-from db.database import get_db, engine, Base
+from app.config import settings
+from app.db.database import get_db, engine, Base
 
 
 user_router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 @user_router.post(
-    "/api/v1/users",
+    "user",
     response_model=UserPrivate,
     status_code=status.HTTP_201_CREATED
 )
@@ -105,7 +105,7 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
 
     access_token = create_access_token(
         data={"sub": str(user.id)}, 

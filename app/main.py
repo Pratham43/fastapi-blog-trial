@@ -7,19 +7,19 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from models import models
+from app.models import models
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 import uvicorn
 
 
-from config import settings
-from db.database import get_db, engine
-from schemas.post_schema import PostCreate, PostResponse
-from schemas.user_schema import UserCreate, UserResponse
+from app.config import settings
+from app.db.database import get_db, engine
+from app.schemas.post_schema import PostCreate, PostResponse
+from app.schemas.user_schema import UserCreate
 
-from api.v1.users import user_router
-from api.v1.posts import post_router
+from app.api.v1.users import user_router
+from app.api.v1.posts import post_router
 from app.core.exceptions import (
     http_exception_handler,
     validation_exception_handler,

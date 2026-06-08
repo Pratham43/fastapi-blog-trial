@@ -15,7 +15,10 @@ class UserUpdate(BaseModel):
     username: str | None = Field(default=None, min_length=1, max_length=50)
     email: EmailStr | None = Field(default=None, max_length=120)
 
-
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    
 class UserPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -37,3 +40,4 @@ class ResetPasswordRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str 
     new_password: str = Field(min_length=8)
+    

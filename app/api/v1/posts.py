@@ -1,14 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from typing import Annotated
-from models import models
-from schemas.post_schema import PostCreate, PostResponse, PostUpdate, PaginatedPostsResponse
-from sqlalchemy import func, select, selectinload
-from sqlalchemy.orm import Session
+from app.models import models
+from app.schemas.post_schema import PostCreate, PostResponse, PostUpdate, PaginatedPostsResponse
+from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.utils.auth import CurrentUser
 from app.config import settings
 
-from db.database import get_db
+from app.db.database import get_db
 
 post_router = APIRouter(prefix="/api/v1/posts", tags=["posts"])
 
@@ -17,7 +18,7 @@ post_router = APIRouter(prefix="/api/v1/posts", tags=["posts"])
 
 @post_router.get("", response_model=PaginatedPostsResponse)
 async def get_posts(
-    db: Annotated[Session, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db)],
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 10,
 ):
@@ -52,7 +53,7 @@ async def get_posts(
 async def create_post(
     post: PostCreate,
     current_user: CurrentUser, 
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[AsyncSession, Depends(get_db)]
 ):
     new_post = models.Post(
         title=post.title,
@@ -66,7 +67,7 @@ async def create_post(
 
 
 @post_router.get("/{post_id}", response_model=PostResponse)
-async def get_post(post_id: int, db: Annotated[Session, Depends(get_db)]):
+async def get_post(post_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
     result = await db.execute(select(models.Post).where(models.Post.id == post_id))
     post = result.scalars().first()
     if post:
@@ -79,7 +80,7 @@ async def update_post_full(
     post_id: int, 
     post_data: PostCreate, 
     current_user: CurrentUser,
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[AsyncSession, Depends(get_db)]
 ):
     result = await db.execute(select(models.Post).where(models.Post.id == post_id))
     post = result.scalars().first()
@@ -105,7 +106,7 @@ async def update_post_partial(
     post_id: int, 
     post_data: PostUpdate, 
     current_user: CurrentUser,
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[AsyncSession, Depends(get_db)]
 ):
     result = await db.execute(select(models.Post).where(models.Post.id == post_id))
     post = result.scalars().first()
@@ -131,7 +132,7 @@ async def update_post_partial(
 async def get_post(
     post_id: int, 
     current_user: CurrentUser,
-    db: Annotated[Session, Depends(get_db)]
+    db: Annotated[AsyncSession, Depends(get_db)]
 ):
     result = await db.execute(select(models.Post).where(models.Post.id == post_id))
     post = result.scalars().first()

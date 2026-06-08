@@ -7,7 +7,7 @@ from pwdlib import PasswordHash
 from app.config import settings
 
 from typing import Annotated
-from fastapi import Depends, HTTPEception, status
+from fastapi import Depends, HTTPException, status
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +20,9 @@ import secrets
 
 passwrod_hash = PasswordHash.recommended()
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/users/token")
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/api/v1/users/token"
+)
 
 def hash_password(password:str) -> str:
     return passwrod_hash.hash(password)
