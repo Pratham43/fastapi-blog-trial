@@ -47,7 +47,7 @@ from app.db.database import get_db, engine, Base
 user_router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 @user_router.post(
-    "user",
+    "/user",
     response_model=UserPrivate,
     status_code=status.HTTP_201_CREATED
 )
@@ -55,6 +55,7 @@ async def create_user(
     user: UserCreate,
     db: Annotated[AsyncSession, Depends(get_db)]
 ) -> UserPrivate:
+    print("THIS IS THE USER INFO" ,user)
     result = await db.execute(
         select(models.User).where(func.lower(models.User.username) == user.username.lower())
     )

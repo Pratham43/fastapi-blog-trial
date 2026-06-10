@@ -25,7 +25,7 @@ async def get_posts(
     count_result = await db.execute(select(func.count()).select_from(models.Post))
     total = count_result.scalar() or 0 
     
-    result = db.execute(
+    result = await db.execute(
         select(models.Post)
         .options(selectinload(models.Post.author))
         .order_by(models.Post.date_posted.desc())
