@@ -92,7 +92,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
         
-    result = db.execute(
+    result = await db.execute(
         select(models.User).where(models.User.id == user_id_int)
     )
     

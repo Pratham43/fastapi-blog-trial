@@ -44,10 +44,10 @@ from app.config import settings
 from app.db.database import get_db, engine, Base
 
 
-user_router = APIRouter(prefix="/api/v1/users", tags=["users"])
+user_router = APIRouter(prefix="/api/v1/user", tags=["users"])
 
 @user_router.post(
-    "user",
+    "/register",
     response_model=UserPrivate,
     status_code=status.HTTP_201_CREATED
 )
@@ -97,7 +97,7 @@ async def login_for_access_token(
         )
     )
     user = result.scalars().first()
-
+    print(user)
     if not user or not verify_password(form_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -217,7 +217,7 @@ async def reset_password(
     }
     
 
-@user_router.patch("/me/password", status_code=status.HTTP_200_OK)
+@user_router.patch("/me/change-password", status_code=status.HTTP_200_OK)
 async def change_password(
     password_data: ChangePasswordRequest,
     current_user: CurrentUser,
@@ -304,6 +304,7 @@ async def get_user_posts(
     result = await db.execute(select(models.Post).where(models.Post.user_id == user_id))
     posts = result.scalars().all()
     return PaginatedPostsResponse(
+        posts=posts,
         total=total,
         skip=skip,
         limit=limit,

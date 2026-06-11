@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from fastapi import FastAPI, Depends, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
@@ -45,6 +46,19 @@ app.add_exception_handler(
     validation_exception_handler,
 )
 
+origins = [
+    "http://localhost:8080",
+    "http://0.0.0.0:8080",
+    "http://127.0.0.1:8080"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,           
+    allow_credentials=True,           
+    allow_methods=["*"],              
+    allow_headers=["*"],            
+)
 app.include_router(user_router)
 app.include_router(post_router) 
 

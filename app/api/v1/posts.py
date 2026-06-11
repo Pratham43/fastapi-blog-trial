@@ -25,7 +25,7 @@ async def get_posts(
     count_result = await db.execute(select(func.count()).select_from(models.Post))
     total = count_result.scalar() or 0 
     
-    result = db.execute(
+    result = await db.execute(
         select(models.Post)
         .options(selectinload(models.Post.author))
         .order_by(models.Post.date_posted.desc())
@@ -60,7 +60,7 @@ async def create_post(
         content=post.content,
         user_id=current_user.id,
     )
-    await db.add(new_post)
+    db.add(new_post)
     await db.commit()
     await db.refresh(new_post)
     return new_post
@@ -68,7 +68,11 @@ async def create_post(
 
 @post_router.get("/{post_id}", response_model=PostResponse)
 async def get_post(post_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
-    result = await db.execute(select(models.Post).where(models.Post.id == post_id))
+    result = await db.execute(
+        select(models.Post)
+        .options(selectinload(models.Post.author))
+        .where(models.Post.id == post_id)
+    )
     post = result.scalars().first()
     if post:
         return post
