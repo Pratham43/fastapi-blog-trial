@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     mail_use_tls: bool = True
 
     frontend_url: str = "http://localhost:8000"
+    
+    redis_host: str = "localhost"
+    redis_port: int = 6379
 
 
 settings = Settings()  # type: ignore[call-arg] # Loaded from .env file
