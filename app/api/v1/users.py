@@ -20,6 +20,7 @@ from sqlalchemy import delete as sql_delete
 
 from fastapi.security import OAuth2PasswordRequestForm
 
+from app.services.user_service import UserService
 from app.utils.auth import (
     CurrentUser,
     create_access_token,
@@ -42,7 +43,7 @@ from app.utils.image_handler import (
 
 from app.config import settings
 from app.db.database import get_db, engine, Base
-
+from app.dependencies.services import get_user_service
 
 user_router = APIRouter(prefix="/api/v1/user", tags=["users"])
 
@@ -51,38 +52,16 @@ user_router = APIRouter(prefix="/api/v1/user", tags=["users"])
     response_model=UserPrivate,
     status_code=status.HTTP_201_CREATED
 )
-async def create_user(
+async def register_user(
     user: UserCreate,
-    db: Annotated[AsyncSession, Depends(get_db)]
-) -> UserPrivate:
-    result = await db.execute(
-        select(models.User).where(func.lower(models.User.username) == user.username.lower())
+    service: Annotated[
+        UserService,
+        Depends(get_user_service)
+    ]
+):
+    return await service.register_user(
+        user
     )
-    existing_username = result.scalars().first()
-    if existing_username:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already exists"
-        )
-
-    result = await db.execute(
-        select(models.User).where(func.lower(models.User.email) == user.email.lower())
-    )
-    existing_email = result.scalars().first()
-    if existing_email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already exists"
-        )
-    new_user = models.User(
-        username=user.username,
-        email=user.email.lower(),
-        password_hash = hash_password(user.password),
-    )
-    db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
-    return new_user
 
 
 
@@ -249,153 +228,76 @@ async def get_current_user(
     """To Get Currently Authenticated User"""
     return current_user
 
-@user_router.get("/{user_id}", response_model=UserPublic)
+@user_router.get(
+    "/{user_id}",
+    response_model=UserPublic
+)
 async def get_user(
     user_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)]
-) -> UserPublic:
-    result = await db.execute(
-        select(models.User).where(models.User.id == user_id)
+    service: Annotated[
+        UserService,
+        Depends(get_user_service)
+    ]
+):
+    return await service.get_user(
+        user_id
     )
-    user = result.scalars().first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    return user
 
-@user_router.get("/{user_id}/posts", response_model=PaginatedPostsResponse)
+@user_router.get(
+    "/{user_id}/posts",
+    response_model=PaginatedPostsResponse
+)
 async def get_user_posts(
     user_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    service: Annotated[
+        UserService,
+        Depends(get_user_service)
+    ],
     skip: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=100)] = 10
-) -> list[PostResponse]:
-    result = await db.execute(
-        select(models.User).where(models.User.id == user_id)
-    )
-
-    user = result.scalars().first() 
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    count_result = await db.execute(
-        select(func.count())
-        .select_from(models.Post)
-        .where(models.Post.user_id == user_id)
-    )
-    
-    total = count_result.scalar() or 0
-
-    result = await db.execute(
-        select(models.Post)
-        .options(selectinload(models.Post.author))
-        .where(models.Post.user_id == user_id)
-        .order_by(models.Post.date_posted.desc())
-        .offset(skip)
-        .limit(limit)
-    )
-    posts = result.scalars().all()
-    has_more = (len(posts) + skip) < total
-    result = await db.execute(select(models.Post).where(models.Post.user_id == user_id))
-    posts = result.scalars().all()
-    return PaginatedPostsResponse(
-        posts=posts,
-        total=total,
-        skip=skip,
-        limit=limit,
-        has_more=has_more
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
+):
+    return await service.get_user_posts(
+        user_id,
+        skip,
+        limit
     )
 
 
-@user_router.patch("/{user_id}", response_model=UserPrivate)
+@user_router.patch(
+    "/{user_id}",
+    response_model=UserPrivate
+)
 async def update_user(
     user_id: int,
     user_update: UserUpdate,
     current_user: CurrentUser,
-    db: Annotated[AsyncSession, Depends(get_db)]
+    service: Annotated[
+        UserService,
+        Depends(get_user_service)
+    ]
 ):
-    
-    if current_user.id != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not Authorized to update this user"
-        )
-    result = db.execute(select(models.User).where(models.User.id == user_id))
-    user = result.scalars().first()
+    return await service.update_user(
+        user_id,
+        current_user.id,
+        user_update
+    )
 
-    if not user:
-        raise HTTPException(
-            status_code = status.HTTP_404_NOT_FOUND,
-            detail="User Not Found"
-        )
-    
-    if user_update.username is not None and user_update.username.lower() != user.username.lower():
-        result = await db.execute(
-            select(models.User).where(func.lower(models.User.username) == user_update.username.lower())
-        )
-
-        existing_user = result.scalars().first()
-
-        if existing_user:
-            raise HTTPException(
-                status_code= status.HTTP_400_BAD_REQUEST,
-                detail="Username aleady exists"
-            )
-        
-    if user_update.email is not None and user_update.email.lower() != user.email.lower():
-        result = await db.execute(
-            select(models.User).where(func.lower(models.User.email) == user_update.email.lower())
-        )
-
-        existing_email = result.scalars().first()
-
-        if existing_email:
-            raise HTTPException(
-                status_code= status.HTTP_400_BAD_REQUEST,
-                detail="Email aleady exists"
-            )
-
-    update_data = user_update.model_dump(exclude_unset=True)
-    for field, value in update_data:
-        setattr(user, field, value)
-
-    await db.commit()
-    await db.refresh(user)
-    return user
-
-@user_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@user_router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT
+)
 async def delete_user(
-    user_id: int, 
+    user_id: int,
     current_user: CurrentUser,
-    db: Annotated[AsyncSession, Depends(get_db)]
+    service: Annotated[
+        UserService,
+        Depends(get_user_service)
+    ]
 ):
-    if current_user.id != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not Authorized to delete this user"
-        )
-    result = await db.execute(select(models.User).where(models.User.user_id == user_id))
-    user = result.scalars().first()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User Not Found"
-        )
-    
-    old_filename = user.image_file
-
-    
-    await db.delete(user)
-    await db.commit()
-
-    if old_filename:
-        await delete_profile_image(old_filename)
+    await service.delete_user(
+        user_id,
+        current_user.id
+    )
 
 
 @user_router.patch("/{user_id}/picture", response_model=UserPrivate)
