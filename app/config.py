@@ -37,6 +37,11 @@ class Settings(BaseSettings):
 
     # Used when constructing public URLs
     s3_public_url: str | None = None
+    
+    
+    cloudinary_cloud_name: str | None = None
+    cloudinary_api_key: SecretStr | None = None
+    cloudinary_api_secret: SecretStr | None = None
 
     # Maximum upload size (5 MB)
     max_upload_size_bytes: int = 5 * 1024 * 1024
