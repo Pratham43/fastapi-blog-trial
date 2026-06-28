@@ -51,7 +51,8 @@ origins = [
     "http://localhost:8080",
     "http://0.0.0.0:8080",
     "http://127.0.0.1:8080",
-    "https://fastapi-blog-trial.onrender.com"
+    "https://fastapi-blog-trial.onrender.com",
+    "https://the-cozy-corner.prathamp454.workers.dev"
 ]
 
 app.add_middleware(
