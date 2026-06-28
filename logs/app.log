@@ -155,3 +155,4 @@
 2026-06-28 19:44:03.153 | INFO | app.core.middleware:dispatch:23 | GET /api/v1/user/me -> 200 (4336.80 ms)
 2026-06-28 19:44:05.098 | INFO | app.core.middleware:dispatch:23 | GET /api/v1/posts -> 200 (6272.26 ms)
 2026-06-28 19:44:21.962 | INFO | app.core.middleware:dispatch:23 | GET /api/v1/posts -> 200 (6862.53 ms)
+2026-06-28 20:47:24.745 | INFO | app.core.middleware:dispatch:23 | GET /api/v1/posts -> 200 (6688.91 ms)
