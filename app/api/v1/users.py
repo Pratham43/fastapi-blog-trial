@@ -21,6 +21,7 @@ from sqlalchemy import delete as sql_delete
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.services.user_service import UserService
+from app.services.auth_service import AuthService
 from app.utils.auth import (
     CurrentUser,
     create_access_token,
@@ -34,63 +35,50 @@ from botocore.exceptions import ClientError
 
 from app.utils.email_handler import send_password_reset_email
 
-from app.utils.image_handler import (
-    delete_profile_image,
-    process_profile_image,
-    upload_profile_image
-)
-
 
 from app.config import settings
 from app.db.database import get_db, engine, Base
 from app.dependencies.services import get_user_service
+from app.dependencies.services import get_auth_service
+
 
 user_router = APIRouter(prefix="/api/v1/user", tags=["users"])
 
 @user_router.post(
     "/register",
     response_model=UserPrivate,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
 )
-async def register_user(
+async def register(
     user: UserCreate,
     service: Annotated[
-        UserService,
-        Depends(get_user_service)
-    ]
+        AuthService,
+        Depends(get_auth_service),
+    ],
 ):
-    return await service.register_user(
+    return await service.register(
         user
     )
 
 
-
-@user_router.post("/token", response_model=Token)
-async def login_for_access_token(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    db: Annotated[AsyncSession, Depends(get_db)]
-) -> Token:
-    result = await db.execute(
-        select(models.User).where(
-            func.lower(models.User.email) == form_data.username.lower()
-        )
+@user_router.post(
+    "/token",
+    response_model=Token,
+)
+async def login(
+    form_data: Annotated[
+        OAuth2PasswordRequestForm,
+        Depends(),
+    ],
+    service: Annotated[
+        AuthService,
+        Depends(get_auth_service),
+    ],
+):
+    return await service.login(
+        email=form_data.username,
+        password=form_data.password,
     )
-    user = result.scalars().first()
-    print(user)
-    if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
-
-    access_token = create_access_token(
-        data={"sub": str(user.id)}, 
-        expires_delta=access_token_expires
-    )
-    return Token(access_token=access_token, token_type="bearer")
 
 @user_router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
 async def forgot_password(
@@ -300,81 +288,38 @@ async def delete_user(
     )
 
 
-@user_router.patch("/{user_id}/picture", response_model=UserPrivate)
+@user_router.patch(
+    "/{user_id}/picture",
+    response_model=UserPrivate,
+)
 async def upload_profile_picture(
     user_id: int,
     file: UploadFile,
     current_user: CurrentUser,
-    db: Annotated[AsyncSession, Depends(get_db)]
+    service: Annotated[
+        UserService,
+        Depends(get_user_service),
+    ],
 ):
-    if current_user.id != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not Authorized to delete this user's picture"
-        )
-    
-    content = await file.read()
+    return await service.upload_profile_picture(
+        user_id=user_id,
+        current_user=current_user,
+        file=file,
+    )
 
-    if len(content) > settings.max_upload_size_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File too large. Maximum size is {settings.max_upload_size_bytes// (1024*1024)}MB"
-        )
-    
-    try:
-        processed_bytes, new_filename = await run_in_threadpool(process_profile_image, content)
-    except UnidentifiedImageError as err:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid image file. Please upload a valid Image (JPEG, PNG, GIF, WebP)."
-        ) from err
-    
-    try:
-        await upload_profile_image(processed_bytes, new_filename)
-    except ClientError as err:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to upload image. Please try again.",
-        ) from err
-    
-    old_filename = current_user.image_file
-
-    current_user.image_file = new_filename
-    await db.commit()
-    await db.refresh(current_user)
-
-    if old_filename:
-        await delete_profile_image(old_filename)
-
-    return current_user
-
-
-@user_router.delete("/{user_id}/picture", response_model=UserPrivate)
+@user_router.delete(
+    "/{user_id}/picture",
+    response_model=UserPrivate,
+)
 async def delete_user_picture(
     user_id: int,
     current_user: CurrentUser,
-    db: Annotated[AsyncSession, Depends(get_db)]
+    service: Annotated[
+        UserService,
+        Depends(get_user_service),
+    ],
 ):
-    if current_user.id != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not Authorized to delete this user's picture"
-        )
-    
-    old_filename = current_user.image_file
-
-    if old_filename is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No profile picture to delete"
-        )
-    
-    
-
-    current_user.image_file = None 
-    await db.commit()
-    await db.refresh(current_user)
-
-    await delete_profile_image(old_filename)
-
-    return current_user
+    return await service.delete_profile_picture(
+        user_id=user_id,
+        current_user=current_user,
+    )

@@ -75,12 +75,12 @@ class PostService:
             )
 
             await uow.posts.create(post)
-
             await uow.commit()
-
             await uow.session.refresh(post)
 
-            return post
+            return await uow.posts.get_by_id(
+                post.id
+            )
 
     async def update_post(
         self,
@@ -110,9 +110,8 @@ class PostService:
             post.content = post_data.content
 
             await uow.commit()
-
             await uow.session.refresh(post)
-
+            
             return post
 
     async def patch_post(
@@ -147,9 +146,8 @@ class PostService:
                 setattr(post, field, value)
 
             await uow.commit()
-
             await uow.session.refresh(post)
-
+            
             return post
 
     async def delete_post(
@@ -176,5 +174,4 @@ class PostService:
                 )
 
             await uow.posts.delete(post)
-
             await uow.commit()

@@ -1,4 +1,4 @@
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, UploadFile
 
 from app.models.models import User
 
@@ -17,12 +17,24 @@ from app.utils.auth import (
     hash_password
 )
 
-from app.utils.image_handler import (
-    delete_profile_image
-)
+from app.providers.storage.base import StorageProvider
+from app.providers.storage.factory import get_storage
+from app.providers.storage.keys import StorageKeys
+from starlette.concurrency import run_in_threadpool
+from botocore.exceptions import ClientError
+
+from app.config import settings
+from app.providers.storage.keys import StorageKeys
+from app.utils.image_handler import process_profile_image
+from PIL import UnidentifiedImageError
 
 
 class UserService:
+    def __init__(
+        self,
+        storage: StorageProvider | None = None,
+    ) -> None:
+        self.storage = storage or get_storage()
 
     async def register_user(
         self,
@@ -217,6 +229,117 @@ class UserService:
             await uow.commit()
 
         if old_filename:
-            await delete_profile_image(
-                old_filename
+            await self.storage.delete(
+                StorageKeys.profile_image(old_filename)
             )
+            
+    async def upload_profile_picture(
+        self,
+        user_id: int,
+        current_user: User,
+        file: UploadFile,
+    ):
+        if current_user.id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to update this user's profile picture.",
+            )
+
+        async with UnitOfWork() as uow:
+            user = await uow.users.get_by_id(user_id)
+
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found.",
+                )
+
+            content = await file.read()
+
+            if len(content) > settings.max_upload_size_bytes:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        f"File too large. Maximum size is "
+                        f"{settings.max_upload_size_bytes // (1024 * 1024)} MB."
+                    ),
+                )
+
+            try:
+                processed_bytes, filename = await run_in_threadpool(
+                    process_profile_image,
+                    content,
+                )
+            except UnidentifiedImageError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Invalid image file. "
+                        "Please upload a valid JPEG, PNG, GIF or WebP image."
+                    ),
+                ) from exc
+
+            try:
+                await self.storage.upload(
+                    file_bytes=processed_bytes,
+                    key=StorageKeys.profile_image(filename),
+                    content_type="image/jpeg",
+                )
+            except ClientError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to upload image.",
+                ) from exc
+
+            old_filename = user.image_file
+
+            user.image_file = filename
+
+            await uow.commit()
+            await uow.session.refresh(user)
+
+        if old_filename:
+            await self.storage.delete(
+                StorageKeys.profile_image(old_filename)
+            )
+
+        return user
+    
+    async def delete_profile_picture(
+        self,
+        user_id: int,
+        current_user: User,
+    ):
+        if current_user.id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to delete this user's profile picture.",
+            )
+
+        async with UnitOfWork() as uow:
+            user = await uow.users.get_by_id(user_id)
+
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found.",
+                )
+
+            if user.image_file is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No profile picture to delete.",
+                )
+
+            old_filename = user.image_file
+
+            user.image_file = None
+
+            await uow.commit()
+            await uow.session.refresh(user)
+
+        await self.storage.delete(
+            StorageKeys.profile_image(old_filename)
+        )
+
+        return user

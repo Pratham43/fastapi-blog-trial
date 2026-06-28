@@ -59,3 +59,35 @@ class PostRepository:
         post: Post
     ):
         await self.session.delete(post)
+        
+    async def count_for_user(
+        self,
+        user_id: int
+    ):
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(Post)
+            .where(Post.user_id == user_id)
+        )
+
+        return result.scalar()
+    
+    
+    async def get_posts_for_user(
+        self,
+        user_id: int,
+        skip: int,
+        limit: int
+    ):
+        result = await self.session.execute(
+            select(Post)
+            .options(
+                selectinload(Post.author)
+            )
+            .where(Post.user_id == user_id)
+            .order_by(Post.date_posted.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+
+        return result.scalars().all()
