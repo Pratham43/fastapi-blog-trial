@@ -24,6 +24,7 @@ class PostResponse(PostBase):
     user_id: int
     date_posted: datetime
     author: UserPublic
+    image_path: str | None
 
 class PaginatedPostsResponse(BaseModel):
     posts: list[PostResponse]

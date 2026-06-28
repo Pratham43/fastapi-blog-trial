@@ -3,9 +3,9 @@ from enum import StrEnum
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 class StorageProviderType(StrEnum):
     S3 = "s3"
+    CLOUDINARY = "cloudinary"
     LOCAL = "local"
 
 
@@ -26,16 +26,11 @@ class Settings(BaseSettings):
 
     storage_provider: StorageProviderType = StorageProviderType.S3
 
-    s3_bucket_name: str
+    s3_bucket_name: str | None = None
     s3_region: str = "us-east-1"
-
     s3_access_key_id: SecretStr | None = None
     s3_secret_access_key: SecretStr | None = None
-
-    # Used by boto3 (AWS, Backblaze, MinIO)
     s3_endpoint_url: str | None = None
-
-    # Used when constructing public URLs
     s3_public_url: str | None = None
     
     
@@ -58,6 +53,7 @@ class Settings(BaseSettings):
 
     mail_server: str = "localhost"
     mail_port: int = 587
+    mail_hostname: str = "localhost"
 
     mail_username: str = ""
     mail_password: SecretStr = SecretStr("")

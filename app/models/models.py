@@ -8,6 +8,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.database import Base
 
 from app.config import settings
+from app.providers import storage
+from app.providers.storage.factory import get_storage
+from app.providers.storage.keys import StorageKeys
 
 
 class User(Base):
@@ -35,9 +38,12 @@ class User(Base):
 
     @property
     def image_path(self) -> str:
-        if self.image_file:
-            return f"https://{settings.s3_bucket_name}.s3.{settings.s3_region}.amazonaws.com/profile_pics/{self.image_file}"
-        return "/static/profile_pics/default.jpg"
+        if self.image_file is None:
+            return "/static/profile_pics/default.jpg"
+
+        storage = get_storage()
+
+        return storage.get_public_url(self.image_file)
 
     
     
@@ -62,7 +68,22 @@ class Post(Base):
     )
     
     likes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    dislikes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     author: Mapped[User] = relationship(back_populates="posts")
+    image_file: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+        default=None,
+    )
+    
+    @property
+    def image_path(self) -> str:
+        if self.image_file is None:
+            return "/static/posts/default.jpg"
+
+        storage = get_storage()
+
+        return storage.get_public_url(self.image_file)
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"

@@ -21,6 +21,8 @@ dependencies = [
     "python-multipart>=0.0.32",
     "redis>=8.0.1",
     "cloudinary>=1.44.2",
+    "loguru>=0.7.3",
+    "asyncpg>=0.31.0",
 ]
 
 [dependency-groups]

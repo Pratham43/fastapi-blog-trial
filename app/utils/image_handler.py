@@ -43,6 +43,6 @@ def process_profile_image(content: bytes) -> tuple[bytes, str]:
 
         output.seek(0)
 
-    filename = f"{uuid.uuid4().hex}.jpg"
+    filename = uuid.uuid4().hex
 
     return output.read(), filename
