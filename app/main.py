@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from app.core.middleware import LoggingMiddleware
 from app.models import models
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -59,8 +60,15 @@ app.add_middleware(
     allow_methods=["*"],              
     allow_headers=["*"],            
 )
+
+app.add_middleware(
+    LoggingMiddleware
+)
+
 app.include_router(user_router)
 app.include_router(post_router) 
+
+
 
 @app.get("/health")
 async def health_check(db: Annotated[AsyncSession, Depends(get_db)]):

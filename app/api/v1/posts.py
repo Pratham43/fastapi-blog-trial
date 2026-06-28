@@ -4,7 +4,11 @@ from fastapi import (
     APIRouter,
     Depends,
     Query,
-    status
+    status,
+    File, 
+    Form, 
+    UploadFile,
+    Request
 )
 
 from app.schemas.post_schema import (
@@ -21,7 +25,7 @@ from app.dependencies.services import (
 )
 
 from app.utils.auth import CurrentUser
-
+from app.core.logger import logger
 
 post_router = APIRouter(
     prefix="/api/v1/posts",
@@ -50,19 +54,31 @@ async def get_posts(
 @post_router.post(
     "",
     response_model=PostResponse,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
 )
 async def create_post(
+    request: Request,
     post: PostCreate,
     current_user: CurrentUser,
     service: Annotated[
         PostService,
-        Depends(get_post_service)
+        Depends(get_post_service),
     ]
 ):
+    logger.info(
+        "Content-Type: {}",
+        request.headers.get("content-type"),
+    )
+
+    logger.info(
+        "Received post: title='{}', content_length={}",
+        post.title,
+        len(post.content)
+    )
+
     return await service.create_post(
         post,
-        current_user.id
+        current_user.id,
     )
 
 
@@ -137,4 +153,23 @@ async def delete_post(
     await service.delete_post(
         post_id,
         current_user.id
+    )
+    
+@post_router.patch(
+    "/{post_id}/picture",
+    response_model=PostResponse
+)
+async def upload_post_picture(
+    post_id: int,
+    file: UploadFile,
+    current_user: CurrentUser,
+    service: Annotated[
+        PostService,
+        Depends(get_post_service)
+    ]
+):
+    return await service.upload_post_picture(
+        post_id=post_id,
+        user_id=current_user.id,
+        file=file,
     )

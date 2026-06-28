@@ -1,3 +1,4 @@
+from datetime import datetime
 from email.message import EmailMessage
 
 import aiosmtplib
@@ -24,37 +25,49 @@ async def send_email(
          
     await aiosmtplib.send(
         message,
-        hostname=settings.mail_hostname,
+        hostname=settings.mail_server,
         port=settings.mail_port,
         username=settings.mail_username if settings.mail_username else None,
         password=settings.mail_password.get_secret_value() or None,
         start_tls=settings.mail_use_tls,
     )
     
-    
-async def send_password_reset_email(to_email: str, username: str, token: str) -> None:
+
+
+async def send_password_reset_email(
+    to_email: str,
+    username: str,
+    token: str,
+) -> None:
     reset_url = f"{settings.frontend_url}/reset-password?token={token}"
 
     template = templates.env.get_template("email/password_reset.html")
-    html_content = template.render(reset_url=reset_url, username=username)
+
+    html_content = template.render(
+        username=username,
+        reset_url=reset_url,
+        current_year=datetime.now().year,
+    )
 
     plain_text = f"""Hi {username},
 
-    You requested to reset your password. Click the link below to set a new password:
+We received a request to reset the password for your Atlania Blog account.
 
-    {reset_url}
+Reset your password using the link below:
 
-    This link will expire in 1 hour.
+{reset_url}
 
-    If you didn't request this, you can safely ignore this email.
+This link will expire in 1 hour.
 
-    Best regards,
-    The ClearDay Blog Team
-    """
+If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.
+
+Best regards,
+The Atlania Blog Team
+"""
 
     await send_email(
         to_email=to_email,
-        subject="Reset Your Password - FastAPI Blog",
+        subject="Reset your Atlania Blog password",
         plain_text=plain_text,
         html_content=html_content,
     )

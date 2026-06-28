@@ -3,6 +3,7 @@ from functools import lru_cache
 from app.config import settings
 from app.providers.storage.base import StorageProvider
 from app.providers.storage.s3 import S3StorageProvider
+from app.providers.storage.cloudinary import CloudinaryStorageProvider
 from enum import StrEnum
 
 
@@ -23,6 +24,8 @@ def get_storage() -> StorageProvider:
 
     if provider == "s3":
         return S3StorageProvider()
+    elif provider == "cloudinary":
+        return CloudinaryStorageProvider()
 
     raise ValueError(
         f"Unsupported storage provider: {provider}"

@@ -11,9 +11,28 @@ from app.schemas.post_schema import (
 
 from app.uow.unit_of_work import UnitOfWork
 
+from fastapi import UploadFile
+from PIL import UnidentifiedImageError
+from starlette.concurrency import run_in_threadpool
+from botocore.exceptions import ClientError
+
+from app.config import settings
+from app.providers.storage.base import StorageProvider
+from app.providers.storage.factory import get_storage
+from app.providers.storage.keys import StorageKeys
+from app.utils.image_handler import process_profile_image
+from app.core.logger import logger
+
 
 class PostService:
-
+    
+    def __init__(
+        self,
+        storage: StorageProvider | None = None,
+    ) -> None:
+        self.storage = storage or get_storage()
+        
+        
     async def get_posts(
         self,
         skip: int,
@@ -64,14 +83,16 @@ class PostService:
     async def create_post(
         self,
         post_data: PostCreate,
-        user_id: int
+        user_id: int,
     ):
         async with UnitOfWork() as uow:
-
+            
+            logger.info("Post created with the title {}, by user with id {} ", post_data.title, user_id)
+            
             post = Post(
                 title=post_data.title,
                 content=post_data.content,
-                user_id=user_id
+                user_id=user_id,
             )
 
             await uow.posts.create(post)
@@ -172,6 +193,77 @@ class PostService:
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Not Authorized"
                 )
+                
+            image_file = post.image_file
+            
+            if image_file:
+                await self.storage.delete(
+                    StorageKeys.post_image(image_file)
+                )
 
             await uow.posts.delete(post)
             await uow.commit()
+            
+            
+    async def upload_post_picture(
+        self,
+        post_id: int,
+        user_id: int,
+        file: UploadFile,
+    ):
+        async with UnitOfWork() as uow:
+
+            post = await uow.posts.get_by_id(
+                post_id
+            )
+
+            if not post:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Post not found"
+                )
+
+            if post.user_id != user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not Authorized"
+                )
+
+            content = await file.read()
+
+            if len(content) > settings.max_upload_size_bytes:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="File too large.",
+                )
+
+            try:
+                processed_bytes, image_filename = await run_in_threadpool(
+                    process_profile_image,
+                    content,
+                )
+            except UnidentifiedImageError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid image.",
+                )
+
+            old_filename = post.image_file
+
+            uploaded = await self.storage.upload(
+                file_bytes=processed_bytes,
+                key=StorageKeys.post_image(image_filename),
+                content_type="image/jpeg",
+            )
+
+            post.image_file = uploaded.key
+
+            await uow.commit()
+            await uow.session.refresh(post)
+
+        if old_filename:
+            await self.storage.delete(
+                StorageKeys.post_image(old_filename)
+            )
+
+        return post

@@ -280,28 +280,26 @@ class UserService:
                 ) from exc
 
             try:
-                await self.storage.upload(
+                uploaded = await self.storage.upload(
                     file_bytes=processed_bytes,
                     key=StorageKeys.profile_image(filename),
                     content_type="image/jpeg",
                 )
-            except ClientError as exc:
+            except Exception as exc:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to upload image.",
                 ) from exc
-
+                
             old_filename = user.image_file
 
-            user.image_file = filename
+            user.image_file = uploaded.key
 
             await uow.commit()
             await uow.session.refresh(user)
 
         if old_filename:
-            await self.storage.delete(
-                StorageKeys.profile_image(old_filename)
-            )
+            await self.storage.delete(old_filename)
 
         return user
     
