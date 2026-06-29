@@ -23,6 +23,7 @@ dependencies = [
     "cloudinary>=1.44.2",
     "loguru>=0.7.3",
     "asyncpg>=0.31.0",
+    "requests>=2.34.2",
 ]
 
 [dependency-groups]
